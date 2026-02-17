@@ -31,6 +31,7 @@ def snapshot_data():
             {
                 "symbol": "7203.T",
                 "memo": "Toyota",
+                "account": "特定",
                 "shares": 100,
                 "cost_price": 2500.0,
                 "current_price": 2850.0,
@@ -42,6 +43,7 @@ def snapshot_data():
             {
                 "symbol": "AAPL",
                 "memo": "Apple",
+                "account": "NISA",
                 "shares": 10,
                 "cost_price": 180.0,
                 "current_price": 195.0,
@@ -77,6 +79,7 @@ def portfolio_list():
             "shares": 100,
             "cost_price": 2500.0,
             "cost_currency": "JPY",
+            "account": "特定",
             "purchase_date": "2025-01-10",
             "memo": "Toyota",
         },
@@ -85,6 +88,7 @@ def portfolio_list():
             "shares": 10,
             "cost_price": 180.0,
             "cost_currency": "USD",
+            "account": "NISA",
             "purchase_date": "2025-02-15",
             "memo": "Apple",
         },
@@ -122,6 +126,7 @@ class TestFormatSnapshot:
         # Table headers
         assert "| 銘柄 |" in output
         assert "| メモ |" in output
+        assert "| 口座 |" in output
         assert "| 株数 |" in output
         assert "| 取得単価 |" in output
         assert "| 現在価格 |" in output
@@ -132,6 +137,8 @@ class TestFormatSnapshot:
         # Symbol data
         assert "7203.T" in output
         assert "AAPL" in output
+        assert "特定" in output
+        assert "NISA" in output
 
     def test_contains_summary(self, snapshot_data):
         """Snapshot contains the summary section."""
@@ -196,9 +203,12 @@ class TestFormatPositionList:
         """Position list includes currency and purchase date columns."""
         output = format_position_list(portfolio_list)
         assert "| 通貨 |" in output
+        assert "| 口座 |" in output
         assert "| 取得日 |" in output
         assert "JPY" in output
         assert "USD" in output
+        assert "特定" in output
+        assert "NISA" in output
         assert "2025-01-10" in output
 
     def test_empty_list_returns_no_holdings_message(self):
@@ -333,6 +343,19 @@ class TestFormatTradeResult:
         }
         output = format_trade_result(result, "buy")
         assert "テスト購入" in output
+
+    def test_account_included_when_present(self):
+        """Account is included in output when provided."""
+        result = {
+            "symbol": "5020.T",
+            "shares": 100,
+            "price": 1410.0,
+            "currency": "JPY",
+            "account": "NISA",
+        }
+        output = format_trade_result(result, "buy")
+        assert "口座" in output
+        assert "NISA" in output
 
     def test_japanese_action_names(self):
         """Japanese action names are correctly normalized."""

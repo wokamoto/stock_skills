@@ -37,6 +37,7 @@ def sample_portfolio():
             "shares": 100,
             "cost_price": 2850.0,
             "cost_currency": "JPY",
+            "account": "特定",
             "purchase_date": "2025-01-15",
             "memo": "Toyota",
         },
@@ -45,10 +46,16 @@ def sample_portfolio():
             "shares": 10,
             "cost_price": 175.50,
             "cost_currency": "USD",
+            "account": "特定",
             "purchase_date": "2025-02-01",
             "memo": "Apple",
         },
     ]
+
+
+def test_csv_columns_include_account():
+    """CSV header definition should include account column."""
+    assert "account" in CSV_COLUMNS
 
 
 # ===================================================================
@@ -75,8 +82,19 @@ class TestLoadPortfolio:
         assert loaded[0]["cost_price"] == 2850.0
         assert isinstance(loaded[0]["cost_price"], float)
         assert loaded[0]["cost_currency"] == "JPY"
+        assert loaded[0]["account"] == "特定"
         assert loaded[0]["purchase_date"] == "2025-01-15"
         assert loaded[0]["memo"] == "Toyota"
+
+    def test_load_old_csv_without_account_column_defaults_tokutei(self, csv_path):
+        """Old CSV (without account column) should default account to 特定."""
+        with open(csv_path, "w", encoding="utf-8", newline="") as f:
+            f.write("symbol,shares,cost_price,cost_currency,purchase_date,memo\n")
+            f.write("7203.T,100,2850.0,JPY,2025-01-15,Toyota\n")
+
+        loaded = load_portfolio(csv_path)
+        assert len(loaded) == 1
+        assert loaded[0]["account"] == "特定"
 
     def test_load_second_position(self, csv_path, sample_portfolio):
         """Verify the second position is also loaded correctly."""
@@ -129,6 +147,7 @@ class TestSavePortfolio:
             assert loaded_row["shares"] == orig["shares"]
             assert loaded_row["cost_price"] == orig["cost_price"]
             assert loaded_row["cost_currency"] == orig["cost_currency"]
+            assert loaded_row["account"] == orig["account"]
 
     def test_creates_directory_if_needed(self, tmp_path):
         """save_portfolio should create parent directories."""
@@ -179,6 +198,7 @@ class TestAddPosition:
         assert result["symbol"] == "7203.T"
         assert result["shares"] == 100
         assert result["cost_price"] == 2850.0
+        assert result["account"] == "特定"
 
         # Verify it was saved
         loaded = load_portfolio(csv_path)
@@ -231,6 +251,17 @@ class TestAddPosition:
         assert result["shares"] == 15
         loaded = load_portfolio(csv_path)
         assert len(loaded) == 1
+
+    def test_same_symbol_different_accounts_are_separate_positions(self, csv_path):
+        """Same symbol in different accounts should not merge."""
+        add_position(csv_path, "5020.T", 100, 1000.0, "JPY", "2025-01-01", account="特定")
+        add_position(csv_path, "5020.T", 100, 1100.0, "JPY", "2025-01-02", account="NISA")
+
+        loaded = load_portfolio(csv_path)
+        assert len(loaded) == 2
+        accounts = {(p["symbol"], p["account"]) for p in loaded}
+        assert ("5020.T", "特定") in accounts
+        assert ("5020.T", "NISA") in accounts
 
     def test_default_purchase_date(self, csv_path):
         """If purchase_date is None, it should default to today's date."""
@@ -325,6 +356,29 @@ class TestSellPosition:
         add_position(csv_path, "AAPL", 10, 175.0, "USD", "2025-01-01")
         result = sell_position(csv_path, "aapl", 5)
         assert result["shares"] == 5
+
+    def test_sell_multiple_accounts_requires_account(self, csv_path):
+        """When same symbol exists in multiple accounts, account should be required."""
+        add_position(csv_path, "5020.T", 100, 1000.0, "JPY", "2025-01-01", account="特定")
+        add_position(csv_path, "5020.T", 100, 1100.0, "JPY", "2025-01-02", account="NISA")
+
+        with pytest.raises(ValueError, match="複数口座"):
+            sell_position(csv_path, "5020.T", 10)
+
+    def test_sell_with_account_targets_specific_position(self, csv_path):
+        """Sell should affect only the specified account position."""
+        add_position(csv_path, "5020.T", 100, 1000.0, "JPY", "2025-01-01", account="特定")
+        add_position(csv_path, "5020.T", 100, 1100.0, "JPY", "2025-01-02", account="NISA")
+
+        result = sell_position(csv_path, "5020.T", 40, account="NISA")
+        assert result["account"] == "NISA"
+        assert result["shares"] == 60
+
+        loaded = load_portfolio(csv_path)
+        nisa = next(p for p in loaded if p["symbol"] == "5020.T" and p["account"] == "NISA")
+        tokutei = next(p for p in loaded if p["symbol"] == "5020.T" and p["account"] == "特定")
+        assert nisa["shares"] == 60
+        assert tokutei["shares"] == 100
 
 
 # ===================================================================

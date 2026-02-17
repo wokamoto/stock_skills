@@ -130,3 +130,8 @@ python3 .../run_stress_test.py --portfolio 7203.T,AAPL,D05.SI --weights 0.5,0.3,
 # カスタムシナリオ
 python3 .../run_stress_test.py --portfolio 7203.T,AAPL --scenario "半導体サプライチェーン崩壊"
 ```
+
+## 出力保存ルール（ローカル運用）
+- 実行結果は `/Users/wokamoto/Work/finance/stress_test/` に保存すること。
+- ファイル名は `YYYY-MM-DD_stress_test_<scenario>.md` を推奨。
+- シナリオ自動判定時は `<scenario>` に `auto` または判定後シナリオ名を利用すること。

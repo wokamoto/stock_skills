@@ -73,7 +73,7 @@ def format_snapshot(snapshot: dict) -> str:
         Expected keys:
         - "timestamp": str (ISO format or display string)
         - "positions": list[dict] with keys:
-            symbol, memo, shares, cost_price, current_price,
+            symbol, memo, account, shares, cost_price, current_price,
             market_value_jpy, pnl_jpy, pnl_pct, currency
         - "total_market_value_jpy": float
         - "total_cost_jpy": float
@@ -108,12 +108,13 @@ def format_snapshot(snapshot: dict) -> str:
         lines.append("\u4fdd\u6709\u9298\u67c4\u304c\u3042\u308a\u307e\u305b\u3093\u3002")
         return "\n".join(lines)
 
-    lines.append("| \u9298\u67c4 | \u30e1\u30e2 | \u682a\u6570 | \u53d6\u5f97\u5358\u4fa1 | \u73fe\u5728\u4fa1\u683c | \u8a55\u4fa1\u984d | \u640d\u76ca | \u640d\u76ca\u7387 |")
-    lines.append("|:-----|:-----|-----:|-------:|-------:|------:|-----:|-----:|")
+    lines.append("| \u9298\u67c4 | \u30e1\u30e2 | \u53e3\u5ea7 | \u682a\u6570 | \u53d6\u5f97\u5358\u4fa1 | \u73fe\u5728\u4fa1\u683c | \u8a55\u4fa1\u984d | \u640d\u76ca | \u640d\u76ca\u7387 |")
+    lines.append("|:-----|:-----|:-----|-----:|-------:|-------:|------:|-----:|-----:|")
 
     for pos in positions:
         symbol = pos.get("symbol", "-")
         memo = pos.get("memo") or ""
+        account = pos.get("account") or "-"
         shares = pos.get("shares", 0)
         cost_price = pos.get("cost_price")
         current_price = pos.get("current_price")
@@ -132,7 +133,7 @@ def format_snapshot(snapshot: dict) -> str:
         pnl_pct_str = f"{indicator} {_fmt_pct(pnl_pct)}" if pnl_pct is not None else "-"
 
         lines.append(
-            f"| {symbol} | {memo} | {shares:,} | {cost_str} | {price_str} "
+            f"| {symbol} | {memo} | {account} | {shares:,} | {cost_str} | {price_str} "
             f"| {mv_str} | {pnl_str} | {pnl_pct_str} |"
         )
 
@@ -183,7 +184,7 @@ def format_position_list(portfolio: list[dict]) -> str:
     ----------
     portfolio : list[dict]
         Each dict should contain: symbol, shares, cost_price,
-        cost_currency, purchase_date, memo.
+        cost_currency, account, purchase_date, memo.
 
     Returns
     -------
@@ -198,14 +199,15 @@ def format_position_list(portfolio: list[dict]) -> str:
         lines.append("\u4fdd\u6709\u9298\u67c4\u304c\u3042\u308a\u307e\u305b\u3093\u3002")
         return "\n".join(lines)
 
-    lines.append("| \u9298\u67c4 | \u682a\u6570 | \u53d6\u5f97\u5358\u4fa1 | \u901a\u8ca8 | \u53d6\u5f97\u65e5 | \u30e1\u30e2 |")
-    lines.append("|:-----|-----:|-------:|:-----|:---------|:-----|")
+    lines.append("| \u9298\u67c4 | \u682a\u6570 | \u53d6\u5f97\u5358\u4fa1 | \u901a\u8ca8 | \u53e3\u5ea7 | \u53d6\u5f97\u65e5 | \u30e1\u30e2 |")
+    lines.append("|:-----|-----:|-------:|:-----|:-----|:---------|:-----|")
 
     for pos in portfolio:
         symbol = pos.get("symbol", "-")
         shares = pos.get("shares", 0)
         cost_price = pos.get("cost_price")
         currency = pos.get("cost_currency") or pos.get("currency", "JPY")
+        account = pos.get("account") or "-"
         purchase_date = pos.get("purchase_date") or "-"
         memo = pos.get("memo") or ""
 
@@ -213,7 +215,7 @@ def format_position_list(portfolio: list[dict]) -> str:
 
         lines.append(
             f"| {symbol} | {shares:,} | {cost_str} | {currency} "
-            f"| {purchase_date} | {memo} |"
+            f"| {account} | {purchase_date} | {memo} |"
         )
 
     lines.append("")
@@ -502,6 +504,7 @@ def format_trade_result(result: dict, action: str) -> str:
         - "shares": int (traded quantity)
         - "price": float (trade price)
         - "currency": str
+        - "account": str (optional)
         - "total_shares": int (updated holding)
         - "avg_cost": float (updated average cost)
         - "memo": str (optional)
@@ -528,6 +531,7 @@ def format_trade_result(result: dict, action: str) -> str:
     shares = result.get("shares", 0)
     price = result.get("price")
     currency = result.get("currency", "JPY")
+    account = result.get("account") or ""
     total_shares = result.get("total_shares")
     avg_cost = result.get("avg_cost")
     memo = result.get("memo") or ""
@@ -536,6 +540,8 @@ def format_trade_result(result: dict, action: str) -> str:
     lines.append("")
     lines.append(f"- \u30a2\u30af\u30b7\u30e7\u30f3: **{action_label}**")
     lines.append(f"- \u9298\u67c4: {symbol}")
+    if account:
+        lines.append(f"- \u53e3\u5ea7: {account}")
     if memo:
         lines.append(f"- \u30e1\u30e2: {memo}")
     lines.append(f"- \u682a\u6570: {shares:,}")

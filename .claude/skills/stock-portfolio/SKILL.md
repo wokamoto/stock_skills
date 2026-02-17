@@ -1,7 +1,7 @@
 ---
 name: stock-portfolio
 description: "ポートフォリオ管理。保有銘柄の一覧表示・売買記録・構造分析。ストレステストの入力データ基盤。"
-argument-hint: "[command] [args]  例: snapshot, buy 7203.T 100 2850, sell AAPL 5, analyze, list"
+argument-hint: "[command] [args]  例: snapshot, buy 7203.T 100 2850 NISA, sell AAPL 5 特定, analyze, list"
 allowed-tools: Bash(python3 *)
 ---
 
@@ -28,13 +28,13 @@ python3 .../run_portfolio.py snapshot
 ### buy -- 購入記録追加
 
 ```bash
-python3 .../run_portfolio.py buy --symbol <sym> --shares <n> --price <p> [--currency JPY] [--date YYYY-MM-DD] [--memo テキスト]
+python3 .../run_portfolio.py buy --symbol <sym> --shares <n> --price <p> [--currency JPY] [--account 特定] [--date YYYY-MM-DD] [--memo テキスト]
 ```
 
 ### sell -- 売却記録
 
 ```bash
-python3 .../run_portfolio.py sell --symbol <sym> --shares <n>
+python3 .../run_portfolio.py sell --symbol <sym> --shares <n> [--account 特定]
 ```
 
 ### analyze -- 構造分析
@@ -123,9 +123,9 @@ python3 .../run_portfolio.py list
 
 | ユーザー入力 | 変換結果 |
 |:-----------|:--------|
-| 「トヨタを100株 2850円で買った」 | `buy --symbol 7203.T --shares 100 --price 2850 --currency JPY` |
-| 「AAPLを10株 $178.50で購入」 | `buy --symbol AAPL --shares 10 --price 178.50 --currency USD` |
-| 「DBSを100株 35.20SGDで買った」 | `buy --symbol D05.SI --shares 100 --price 35.20 --currency SGD` |
+| 「トヨタを100株 2850円で買った」 | `buy --symbol 7203.T --shares 100 --price 2850 --currency JPY --account 特定` |
+| 「AAPLを10株 $178.50でNISA購入」 | `buy --symbol AAPL --shares 10 --price 178.50 --currency USD --account NISA` |
+| 「DBSを100株 35.20SGDで買った」 | `buy --symbol D05.SI --shares 100 --price 35.20 --currency SGD --account 特定` |
 
 企業名が指定された場合はティッカーシンボルに変換してから --symbol に指定すること。
 
@@ -135,6 +135,7 @@ python3 .../run_portfolio.py list
 |:-----------|:--------|
 | 「トヨタを100株売った」 | `sell --symbol 7203.T --shares 100` |
 | 「AAPLを5株売却」 | `sell --symbol AAPL --shares 5` |
+| 「NISAのAAPLを5株売却」 | `sell --symbol AAPL --shares 5 --account NISA` |
 
 ### rebalance コマンドの自然言語変換例
 
@@ -169,7 +170,7 @@ python3 .../run_portfolio.py list
 結果はMarkdown形式で表示してください。
 
 ### snapshot の出力項目
-- 銘柄 / 名称 / 保有数 / 取得単価 / 現在価格 / 評価額 / 損益 / 損益率 / 通貨
+- 銘柄 / 名称・メモ / 口座 / 保有数 / 取得単価 / 現在価格 / 評価額 / 損益 / 損益率 / 通貨
 
 ### analyze の出力項目
 - セクターHHI / 地域HHI / 通貨HHI
@@ -204,10 +205,10 @@ python3 .../run_portfolio.py list
 python3 .../run_portfolio.py snapshot
 
 # 購入記録
-python3 .../run_portfolio.py buy --symbol 7203.T --shares 100 --price 2850 --currency JPY --date 2025-06-15 --memo トヨタ
+python3 .../run_portfolio.py buy --symbol 7203.T --shares 100 --price 2850 --currency JPY --account 特定 --date 2025-06-15 --memo トヨタ
 
 # 売却記録
-python3 .../run_portfolio.py sell --symbol AAPL --shares 5
+python3 .../run_portfolio.py sell --symbol AAPL --shares 5 --account NISA
 
 # 構造分析
 python3 .../run_portfolio.py analyze

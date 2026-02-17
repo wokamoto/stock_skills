@@ -38,9 +38,12 @@ CSV_COLUMNS = [
     "shares",
     "cost_price",
     "cost_currency",
+    "account",
     "purchase_date",
     "memo",
 ]
+
+DEFAULT_ACCOUNT = "特定"
 
 # FX pairs to fetch for JPY conversion
 _FX_PAIRS = [
@@ -81,7 +84,10 @@ def load_portfolio(csv_path: str = DEFAULT_CSV_PATH) -> list[dict]:
     Returns
     -------
     list[dict]
-        各行が dict: {symbol, shares, cost_price, cost_currency, purchase_date, memo}
+        各行が dict: {
+            symbol, shares, cost_price, cost_currency,
+            account, purchase_date, memo
+        }
         shares は int, cost_price は float に変換済み。
         ファイルが存在しない場合は空リストを返す。
     """
@@ -98,6 +104,7 @@ def load_portfolio(csv_path: str = DEFAULT_CSV_PATH) -> list[dict]:
                 "shares": int(float(row.get("shares", 0))),
                 "cost_price": float(row.get("cost_price", 0.0)),
                 "cost_currency": row.get("cost_currency", "JPY").strip(),
+                "account": row.get("account", DEFAULT_ACCOUNT).strip() or DEFAULT_ACCOUNT,
                 "purchase_date": row.get("purchase_date", "").strip(),
                 "memo": row.get("memo", "").strip(),
             }
@@ -127,6 +134,7 @@ def save_portfolio(
                     "shares": pos.get("shares", 0),
                     "cost_price": pos.get("cost_price", 0.0),
                     "cost_currency": pos.get("cost_currency", "JPY"),
+                    "account": pos.get("account", DEFAULT_ACCOUNT) or DEFAULT_ACCOUNT,
                     "purchase_date": pos.get("purchase_date", ""),
                     "memo": pos.get("memo", ""),
                 }
@@ -146,6 +154,7 @@ def add_position(
     cost_currency: str = "JPY",
     purchase_date: Optional[str] = None,
     memo: str = "",
+    account: str = DEFAULT_ACCOUNT,
 ) -> dict:
     """新規ポジション追加 or 既存ポジションへの追加購入。
 
@@ -161,13 +170,15 @@ def add_position(
     """
     if purchase_date is None:
         purchase_date = datetime.now().strftime("%Y-%m-%d")
+    account = (account or DEFAULT_ACCOUNT).strip() or DEFAULT_ACCOUNT
 
     portfolio = load_portfolio(csv_path)
 
-    # Search for existing position with same symbol
+    # Search for existing position with same symbol and account
     existing = None
     for pos in portfolio:
-        if pos["symbol"].upper() == symbol.upper():
+        pos_account = (pos.get("account") or DEFAULT_ACCOUNT).strip() or DEFAULT_ACCOUNT
+        if pos["symbol"].upper() == symbol.upper() and pos_account == account:
             existing = pos
             break
 
@@ -194,6 +205,7 @@ def add_position(
             "shares": shares,
             "cost_price": cost_price,
             "cost_currency": cost_currency,
+            "account": account,
             "purchase_date": purchase_date,
             "memo": memo,
         }
@@ -208,6 +220,7 @@ def sell_position(
     csv_path: str,
     symbol: str,
     shares: int,
+    account: Optional[str] = None,
 ) -> dict:
     """売却。shares分を減算。0以下になったら行を削除。
 
@@ -223,20 +236,35 @@ def sell_position(
     """
     portfolio = load_portfolio(csv_path)
 
-    target_idx = None
+    account = ((account or "").strip() or None)
+
+    matching_indices: list[int] = []
     for i, pos in enumerate(portfolio):
-        if pos["symbol"].upper() == symbol.upper():
-            target_idx = i
-            break
+        pos_account = (pos.get("account") or DEFAULT_ACCOUNT).strip() or DEFAULT_ACCOUNT
+        if pos["symbol"].upper() != symbol.upper():
+            continue
+        if account is not None and pos_account != account:
+            continue
+        matching_indices.append(i)
 
-    if target_idx is None:
-        raise ValueError(f"銘柄 {symbol} はポートフォリオに存在しません。")
+    if not matching_indices:
+        if account is None:
+            raise ValueError(f"銘柄 {symbol} はポートフォリオに存在しません。")
+        raise ValueError(
+            f"銘柄 {symbol} は口座 {account} に存在しません。"
+        )
+    if account is None and len(matching_indices) > 1:
+        raise ValueError(
+            f"銘柄 {symbol} は複数口座に存在します。口座を指定してください。"
+        )
 
+    target_idx = matching_indices[0]
     target = portfolio[target_idx]
+    target_account = (target.get("account") or DEFAULT_ACCOUNT).strip() or DEFAULT_ACCOUNT
 
     if shares > target["shares"]:
         raise ValueError(
-            f"銘柄 {symbol} の保有数 ({target['shares']}) を超える "
+            f"銘柄 {symbol} ({target_account}) の保有数 ({target['shares']}) を超える "
             f"売却数 ({shares}) が指定されました。"
         )
 
@@ -393,6 +421,7 @@ def get_snapshot(csv_path: str, client) -> dict:
                 "shares": shares,
                 "cost_price": cost_price,
                 "cost_currency": cost_currency,
+                "account": pos.get("account", DEFAULT_ACCOUNT),
                 "current_price": cost_price,
                 "market_currency": cash_currency,
                 "evaluation": cost_price * shares,
@@ -449,6 +478,7 @@ def get_snapshot(csv_path: str, client) -> dict:
             "shares": shares,
             "cost_price": cost_price,
             "cost_currency": cost_currency,
+            "account": pos.get("account", DEFAULT_ACCOUNT),
             "current_price": current_price,
             "market_currency": market_currency,
             "evaluation": evaluation,

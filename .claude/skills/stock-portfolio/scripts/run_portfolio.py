@@ -158,6 +158,7 @@ except ImportError:
 DEFAULT_CSV = os.path.join(
     os.path.dirname(__file__), "..", "data", "portfolio.csv"
 )
+DEFAULT_ACCOUNT = "特定"
 
 
 # ---------------------------------------------------------------------------
@@ -212,6 +213,7 @@ def _fallback_load_csv(csv_path: str) -> list[dict]:
         for row in reader:
             row["shares"] = int(row["shares"])
             row["cost_price"] = float(row["cost_price"])
+            row["account"] = (row.get("account", DEFAULT_ACCOUNT) or "").strip() or DEFAULT_ACCOUNT
             rows.append(row)
     return rows
 
@@ -219,7 +221,15 @@ def _fallback_load_csv(csv_path: str) -> list[dict]:
 def _fallback_save_csv(csv_path: str, holdings: list[dict]) -> None:
     """Save holdings list back to CSV."""
     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
-    fieldnames = ["symbol", "shares", "cost_price", "cost_currency", "purchase_date", "memo"]
+    fieldnames = [
+        "symbol",
+        "shares",
+        "cost_price",
+        "cost_currency",
+        "account",
+        "purchase_date",
+        "memo",
+    ]
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -248,12 +258,13 @@ def cmd_list(csv_path: str) -> None:
 
     # Fallback: print as markdown table
     print("## ポートフォリオ一覧\n")
-    print("| 銘柄 | 保有数 | 取得単価 | 通貨 | 購入日 | メモ |")
-    print("|:-----|------:|--------:|:-----|:-------|:-----|")
+    print("| 銘柄 | 保有数 | 取得単価 | 通貨 | 口座 | 購入日 | メモ |")
+    print("|:-----|------:|--------:|:-----|:-----|:-------|:-----|")
     for h in holdings:
         print(
             f"| {h['symbol']} | {h['shares']} | {h['cost_price']:.2f} "
-            f"| {h.get('cost_currency', '-')} | {h.get('purchase_date', '-')} "
+            f"| {h.get('cost_currency', '-')} | {h.get('account', DEFAULT_ACCOUNT)} "
+            f"| {h.get('purchase_date', '-')} "
             f"| {h.get('memo', '')} |"
         )
     print()
@@ -284,6 +295,7 @@ def cmd_snapshot(csv_path: str) -> None:
                     {
                         "symbol": p["symbol"],
                         "memo": p.get("memo") or p.get("name") or "",
+                        "account": p.get("account", DEFAULT_ACCOUNT),
                         "shares": p["shares"],
                         "cost_price": p["cost_price"],
                         "current_price": p.get("current_price"),
@@ -306,15 +318,16 @@ def cmd_snapshot(csv_path: str) -> None:
         else:
             # Fallback: table output
             print("## ポートフォリオ スナップショット\n")
-            print("| 銘柄 | 名称 | 保有数 | 取得単価 | 現在価格 | 評価額(円) | 損益(円) | 損益率 |")
-            print("|:-----|:-----|------:|--------:|--------:|---------:|--------:|------:|")
+            print("| 銘柄 | 名称 | 口座 | 保有数 | 取得単価 | 現在価格 | 評価額(円) | 損益(円) | 損益率 |")
+            print("|:-----|:-----|:-----|------:|--------:|--------:|---------:|--------:|------:|")
             for p in positions:
                 price_str = f"{p['current_price']:.2f}" if p.get("current_price") else "-"
                 mv_str = f"{p.get('evaluation_jpy', 0):,.0f}"
                 pnl_str = f"{p.get('pnl_jpy', 0):+,.0f}"
                 pnl_pct_str = f"{p.get('pnl_pct', 0) * 100:+.1f}%"
                 print(
-                    f"| {p['symbol']} | {p.get('name') or p.get('memo', '')} | {p['shares']} "
+                    f"| {p['symbol']} | {p.get('name') or p.get('memo', '')} | "
+                    f"{p.get('account', DEFAULT_ACCOUNT)} | {p['shares']} "
                     f"| {p['cost_price']:.2f} | {price_str} | {mv_str} "
                     f"| {pnl_str} | {pnl_pct_str} |"
                 )
@@ -331,14 +344,17 @@ def cmd_snapshot(csv_path: str) -> None:
         return
 
     print("## ポートフォリオ スナップショット\n")
-    print("| 銘柄 | 保有数 | 取得単価 | 現在価格 | 損益率 |")
-    print("|:-----|------:|--------:|--------:|------:|")
+    print("| 銘柄 | 口座 | 保有数 | 取得単価 | 現在価格 | 損益率 |")
+    print("|:-----|:-----|------:|--------:|--------:|------:|")
     for h in holdings:
         symbol = h["symbol"]
         # Skip cash positions
         if symbol.upper().endswith(".CASH"):
             currency = symbol.upper().replace(".CASH", "")
-            print(f"| {symbol} | {h['shares']} | {h['cost_price']:.2f} | {h['cost_price']:.2f} | - |")
+            print(
+                f"| {symbol} | {h.get('account', DEFAULT_ACCOUNT)} | {h['shares']} "
+                f"| {h['cost_price']:.2f} | {h['cost_price']:.2f} | - |"
+            )
             continue
         info = yahoo_client.get_stock_info(symbol)
         price = info.get("price") if info else None
@@ -348,7 +364,10 @@ def cmd_snapshot(csv_path: str) -> None:
             pnl_str = f"{pnl_pct:+.1f}%"
         else:
             pnl_str = "-"
-        print(f"| {symbol} | {h['shares']} | {h['cost_price']:.2f} | {price_str} | {pnl_str} |")
+        print(
+            f"| {symbol} | {h.get('account', DEFAULT_ACCOUNT)} | {h['shares']} "
+            f"| {h['cost_price']:.2f} | {price_str} | {pnl_str} |"
+        )
     print()
 
 
@@ -362,21 +381,33 @@ def cmd_buy(
     shares: int,
     price: float,
     currency: str = "JPY",
+    account: str = DEFAULT_ACCOUNT,
     purchase_date: Optional[str] = None,
     memo: str = "",
 ) -> None:
     """Add a purchase record to the portfolio CSV."""
     if purchase_date is None:
         purchase_date = date.today().isoformat()
+    account = (account or DEFAULT_ACCOUNT).strip() or DEFAULT_ACCOUNT
 
     if HAS_PORTFOLIO_MANAGER:
-        result = add_position(csv_path, symbol, shares, price, currency, purchase_date, memo)
+        result = add_position(
+            csv_path=csv_path,
+            symbol=symbol,
+            shares=shares,
+            cost_price=price,
+            cost_currency=currency,
+            account=account,
+            purchase_date=purchase_date,
+            memo=memo,
+        )
         if HAS_PORTFOLIO_FORMATTER:
             print(format_trade_result({
                 "symbol": symbol,
                 "shares": shares,
                 "price": price,
                 "currency": currency,
+                "account": account,
                 "total_shares": result.get("shares"),
                 "avg_cost": result.get("cost_price"),
                 "memo": memo,
@@ -389,8 +420,12 @@ def cmd_buy(
             return
     else:
         holdings = _fallback_load_csv(csv_path)
-        # Check if symbol already exists -- merge shares
-        existing = [h for h in holdings if h["symbol"] == symbol]
+        # Check if symbol/account already exists -- merge shares
+        existing = [
+            h for h in holdings
+            if h["symbol"].upper() == symbol.upper()
+            and (h.get("account", DEFAULT_ACCOUNT) == account)
+        ]
         if existing:
             old = existing[0]
             # Weighted average cost
@@ -408,12 +443,13 @@ def cmd_buy(
                 "shares": shares,
                 "cost_price": price,
                 "cost_currency": currency,
+                "account": account,
                 "purchase_date": purchase_date,
                 "memo": memo,
             })
         _fallback_save_csv(csv_path, holdings)
 
-    print(f"購入記録を追加しました: {symbol} {shares}株 @ {price} {currency}")
+    print(f"購入記録を追加しました: {symbol} {shares}株 @ {price} {currency} ({account})")
     print(f"  購入日: {purchase_date}")
     if memo:
         print(f"  メモ: {memo}")
@@ -429,16 +465,31 @@ def cmd_buy(
 # Command: sell
 # ---------------------------------------------------------------------------
 
-def cmd_sell(csv_path: str, symbol: str, shares: int) -> None:
+def cmd_sell(
+    csv_path: str,
+    symbol: str,
+    shares: int,
+    account: Optional[str] = None,
+) -> None:
     """Record a sale (reduce shares for a symbol)."""
+    account = ((account or "").strip() or None)
+
     if HAS_PORTFOLIO_MANAGER:
         try:
-            result = sell_position(csv_path, symbol, shares)
+            result = sell_position(csv_path, symbol, shares, account=account)
             remaining = result.get("shares", 0)
+            sold_account = result.get("account", DEFAULT_ACCOUNT)
+            account_label = f" ({sold_account})"
             if remaining == 0:
-                print(f"売却完了: {symbol} {shares}株 (全株売却 -- ポートフォリオから削除)")
+                print(
+                    f"売却完了: {symbol}{account_label} {shares}株 "
+                    f"(全株売却 -- ポートフォリオから削除)"
+                )
             else:
-                print(f"売却記録を追加しました: {symbol} {shares}株 (残り {remaining}株)")
+                print(
+                    f"売却記録を追加しました: {symbol}{account_label} "
+                    f"{shares}株 (残り {remaining}株)"
+                )
             if HAS_HISTORY:
                 try:
                     save_trade(symbol, "sell", shares, 0.0, "", date.today().isoformat())
@@ -450,22 +501,38 @@ def cmd_sell(csv_path: str, symbol: str, shares: int) -> None:
             sys.exit(1)
 
     holdings = _fallback_load_csv(csv_path)
-    existing = [h for h in holdings if h["symbol"] == symbol]
+    if account is None:
+        existing = [h for h in holdings if h["symbol"].upper() == symbol.upper()]
+    else:
+        existing = [
+            h for h in holdings
+            if h["symbol"].upper() == symbol.upper()
+            and h.get("account", DEFAULT_ACCOUNT) == account
+        ]
+
     if not existing:
-        print(f"Error: {symbol} はポートフォリオに存在しません。")
+        if account is None:
+            print(f"Error: {symbol} はポートフォリオに存在しません。")
+        else:
+            print(f"Error: {symbol} は口座 {account} に存在しません。")
+        sys.exit(1)
+    if account is None and len(existing) > 1:
+        print(f"Error: {symbol} は複数口座に存在します。--account を指定してください。")
         sys.exit(1)
 
     h = existing[0]
+    sold_account = h.get("account", DEFAULT_ACCOUNT)
+    account_label = f" ({sold_account})"
     if shares > h["shares"]:
         print(f"Error: 売却数 ({shares}) が保有数 ({h['shares']}) を超えています。")
         sys.exit(1)
 
     h["shares"] -= shares
     if h["shares"] == 0:
-        holdings = [x for x in holdings if x["symbol"] != symbol]
-        print(f"売却完了: {symbol} {shares}株 (全株売却 -- ポートフォリオから削除)")
+        holdings = [x for x in holdings if x is not h]
+        print(f"売却完了: {symbol}{account_label} {shares}株 (全株売却 -- ポートフォリオから削除)")
     else:
-        print(f"売却記録を追加しました: {symbol} {shares}株 (残り {h['shares']}株)")
+        print(f"売却記録を追加しました: {symbol}{account_label} {shares}株 (残り {h['shares']}株)")
 
     _fallback_save_csv(csv_path, holdings)
 
@@ -1012,6 +1079,7 @@ def main():
     buy_parser.add_argument("--shares", required=True, type=int, help="株数")
     buy_parser.add_argument("--price", required=True, type=float, help="取得単価")
     buy_parser.add_argument("--currency", default="JPY", help="通貨コード (デフォルト: JPY)")
+    buy_parser.add_argument("--account", default=DEFAULT_ACCOUNT, help="口座種別 (例: 特定, NISA, 一般)")
     buy_parser.add_argument("--date", default=None, help="購入日 (YYYY-MM-DD)")
     buy_parser.add_argument("--memo", default="", help="メモ")
 
@@ -1019,6 +1087,7 @@ def main():
     sell_parser = subparsers.add_parser("sell", help="売却記録")
     sell_parser.add_argument("--symbol", required=True, help="銘柄シンボル (例: 7203.T)")
     sell_parser.add_argument("--shares", required=True, type=int, help="売却株数")
+    sell_parser.add_argument("--account", default=None, help="口座種別 (未指定時は自動判定)")
 
     # analyze
     subparsers.add_parser("analyze", help="構造分析 (セクター/地域/通貨HHI)")
@@ -1133,11 +1202,17 @@ def main():
             shares=args.shares,
             price=args.price,
             currency=args.currency,
+            account=args.account,
             purchase_date=args.date,
             memo=args.memo,
         )
     elif args.command == "sell":
-        cmd_sell(csv_path=csv_path, symbol=args.symbol, shares=args.shares)
+        cmd_sell(
+            csv_path=csv_path,
+            symbol=args.symbol,
+            shares=args.shares,
+            account=args.account,
+        )
     elif args.command == "analyze":
         cmd_analyze(csv_path)
     elif args.command == "list":

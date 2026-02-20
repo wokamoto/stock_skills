@@ -5,7 +5,10 @@ import json
 import sys
 import os
 
-WATCHLIST_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "data", "watchlists")
+WATCHLIST_DIR = os.environ.get(
+    "WATCHLIST_DIR",
+    os.path.join(os.getcwd(), "data", "watchlists"),
+)
 
 
 def _ensure_dir():
